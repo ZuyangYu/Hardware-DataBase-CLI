@@ -14,11 +14,14 @@ def query_group():
 @query_group.command("ask", help="Ask a question (streaming answer).")
 @click.option("--kb", required=True, help="Knowledge base name")
 @click.option("--thread-id", default=None, help="Optional conversation thread ID")
+@click.option("--json", "json_mode", is_flag=True, default=False, help="Output as JSON.")
 @click.argument("question")
 @click.pass_context
-def query_ask(ctx, kb, thread_id, question):
+def query_ask(ctx, kb, thread_id, json_mode, question):
     client = ctx.obj["client"]
     skin = ctx.obj["skin"]
+    if json_mode:
+        skin.json_mode = True
     try:
         if skin.json_mode:
             answer_parts: list[str] = []
@@ -48,5 +51,10 @@ def query_ask(ctx, kb, thread_id, question):
                     raise SystemExit(1)
             print()
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Query failed: {e.message}")
+        skin.api_error("Query", e)
+        if e.status_code == 403:
+            skin.next_step(
+                f"perm list --kb {kb}                     检查该 KB 的权限",
+                f"perm grant --kb {kb} --user <你> --permission read  为自己授权",
+            )
         raise SystemExit(1)

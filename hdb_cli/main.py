@@ -32,13 +32,15 @@ from .commands.conversations import conv_group
 from .commands.governance import gov_group
 from .commands.config_cmd import config_group
 from .commands.logs import log_group
+from .commands.doctor import doctor_group
+from .commands.misc import completion_cmd, version_cmd
 
 
 DEFAULT_URL = "http://127.0.0.1:8000"
 
 # Groups that do NOT require a token. Everything else prompts login if
 # no session is on disk.
-_NO_AUTH_GROUPS = {"server", "auth"}
+_NO_AUTH_GROUPS = {"server", "auth", "doctor", "completion", "version"}
 
 
 def _needs_auth(invoked: str | None, argv: list[str]) -> bool:
@@ -90,9 +92,11 @@ def _interactive_login(client: HardwareDatabaseClient, skin: ConsoleSkin, api_ur
 @click.option("--json", "json_mode", is_flag=True, default=False, help="Output as JSON.")
 @click.option("--api-url", default=None, help="API server URL (env: HDB_API_URL).")
 @click.option("--token", default=None, help="Bearer token (env: HDB_TOKEN).")
+@click.option("-v", "--verbose", is_flag=True, default=False,
+              help="Print HTTP method/URL/status for every request.")
 @click.version_option(package_name="hardware-database-cli")
 @click.pass_context
-def cli(ctx, json_mode, api_url, token):
+def cli(ctx, json_mode, api_url, token, verbose):
     ctx.ensure_object(dict)
     skin = ConsoleSkin(json_mode=json_mode)
 
@@ -113,9 +117,12 @@ def cli(ctx, json_mode, api_url, token):
         )
 
     client = HardwareDatabaseClient(base_url=resolved_url, token=resolved_token)
+    if verbose:
+        client.set_verbose_logger(lambda msg: skin.console.print(f"[dim]{msg}[/dim]"))
 
     ctx.obj.update({
         "json": json_mode,
+        "verbose": verbose,
         "api_url": resolved_url,
         "client": client,
         "skin": skin,
@@ -147,9 +154,13 @@ def cli(ctx, json_mode, api_url, token):
 for _grp in (
     server_group, auth_group, kb_group, file_group, query_group,
     user_group, dept_group, perm_group, task_group, conv_group,
-    gov_group, config_group, log_group,
+    gov_group, config_group, log_group, doctor_group,
 ):
     cli.add_command(_grp)
+
+# Standalone (leaf) commands
+cli.add_command(completion_cmd)
+cli.add_command(version_cmd)
 
 
 def main():

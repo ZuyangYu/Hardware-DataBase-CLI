@@ -34,7 +34,7 @@ def conv_list(ctx, kb):
                 for r in rows
             ])
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -52,7 +52,7 @@ def conv_create(ctx, kb, title):
         if skin.json_mode:
             skin.json_out(resp)
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -66,7 +66,7 @@ def conv_delete(ctx, session_id):
         client.delete_conversation(session_id)
         skin.success(f"Conversation {session_id} deleted.")
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -80,7 +80,7 @@ def conv_clear(ctx, session_id):
         client.clear_conversation(session_id)
         skin.success(f"Conversation {session_id} cleared.")
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -102,7 +102,7 @@ def conv_messages(ctx, session_id):
                 skin.section(f"[{role}]")
                 skin.console.print(content)
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -120,5 +120,5 @@ def conv_send(ctx, session_id, message):
         else:
             skin.display(resp)
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)

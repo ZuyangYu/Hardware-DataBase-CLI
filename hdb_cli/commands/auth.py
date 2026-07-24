@@ -37,7 +37,10 @@ def auth_login(ctx, user, password):
         cfg.save(session)
         skin.success(f"Logged in as [bold]{username}[/bold] ({role})")
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Login failed: {e.message}")
+        if e.status_code == 500:
+            skin.api_error("Login", e)
+        else:
+            skin.api_error("Login", e)
         raise SystemExit(1)
 
 
@@ -56,10 +59,13 @@ def auth_logout(ctx):
 
 
 @auth_group.command("whoami", help="Show current user info (from server).")
+@click.option("--json", "json_mode", is_flag=True, default=False, help="Output as JSON.")
 @click.pass_context
-def auth_whoami(ctx):
+def auth_whoami(ctx, json_mode):
     client = ctx.obj["client"]
     skin = ctx.obj["skin"]
+    if json_mode:
+        skin.json_mode = True
     try:
         data = client.whoami()
         # Handle both wrapped and flat responses
@@ -72,7 +78,7 @@ def auth_whoami(ctx):
             else:
                 skin.display(user)
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed to get user info: {e.message}")
+        skin.api_error("Whoami", e)
         raise SystemExit(1)
 
 

@@ -28,7 +28,7 @@ def dept_list(ctx):
                 for r in rows
             ])
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -45,22 +45,23 @@ def dept_create(ctx, name, description):
         if skin.json_mode:
             skin.json_out(resp)
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
 @dept_group.command("delete", help="Delete a department (system_admin only).")
 @click.argument("department_id", type=int)
+@click.option("-y", "--yes", is_flag=True, default=False, help="Skip confirmation.")
 @click.pass_context
-def dept_delete(ctx, department_id):
+def dept_delete(ctx, department_id, yes):
     client = ctx.obj["client"]
     skin = ctx.obj["skin"]
-    if not click.confirm(f"Delete department {department_id}?"):
+    if not yes and not click.confirm(f"Delete department {department_id}?"):
         skin.info("Cancelled.")
         return
     try:
         client.delete_department(department_id)
         skin.success(f"Department {department_id} deleted.")
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Delete department", e)
         raise SystemExit(1)

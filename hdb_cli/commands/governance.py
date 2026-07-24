@@ -18,7 +18,7 @@ def gov_stats(ctx):
         data = client.governance_stats()
         skin.display(data)
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -46,5 +46,5 @@ def gov_kb_summaries(ctx):
                 for r in rows
             ])
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)

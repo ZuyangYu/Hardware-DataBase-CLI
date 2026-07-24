@@ -28,6 +28,8 @@ class ReplEngine:
         self.ctx_obj = ctx_obj
         self.skin = skin
         self._prompt_session = None
+        # KB context: when set, commands that accept --kb but omit it inherit this
+        self._current_kb: str | None = None
 
     def _get_prompt_session(self):
         if self._prompt_session is not None:
@@ -46,11 +48,16 @@ class ReplEngine:
                 history=FileHistory(str(HISTORY_FILE)),
                 auto_suggest=AutoSuggestFromHistory(),
                 style=style,
-                message=[("class:prompt", "hdb> ")],
             )
         except ImportError:
             self._prompt_session = None
         return self._prompt_session
+
+    def _prompt_str(self) -> str:
+        """Build the REPL prompt, reflecting current KB context if set."""
+        if self._current_kb:
+            return f"hdb({self._current_kb})> "
+        return "hdb> "
 
     def run(self) -> None:
         """Enter the REPL loop."""
@@ -75,7 +82,7 @@ class ReplEngine:
     def _run_prompt_toolkit(self, session) -> None:
         while True:
             try:
-                line = session.prompt()
+                line = session.prompt(message=[("class:prompt", self._prompt_str())])
             except (KeyboardInterrupt, EOFError):
                 print()
                 break
@@ -86,7 +93,7 @@ class ReplEngine:
     def _run_fallback(self) -> None:
         while True:
             try:
-                line = input("hdb> ")
+                line = input(self._prompt_str())
             except (KeyboardInterrupt, EOFError):
                 print()
                 break
@@ -104,6 +111,23 @@ class ReplEngine:
         if stripped in ("help", "h", "?"):
             self.skin.console.print(REPL_HELP)
             return True
+        # use <kb> — set KB context
+        if stripped.startswith("use "):
+            kb = stripped[4:].strip()
+            if kb:
+                self._current_kb = kb
+                self.skin.success(f"Now using KB: [bold]{kb}[/bold]")
+                self.skin.hint("Commands that accept --kb inherit it automatically.")
+            else:
+                self.skin.error("Usage: use <kb-name>")
+            return True
+        if stripped == "unuse":
+            if self._current_kb:
+                self.skin.info(f"Cleared KB context: {self._current_kb}")
+                self._current_kb = None
+            else:
+                self.skin.info("No KB context set.")
+            return True
         return None
 
     def _dispatch(self, line: str) -> bool:
@@ -118,6 +142,8 @@ class ReplEngine:
             return True
         if not args:
             return True
+        # Inject --kb from context if command accepts it and user didn't provide
+        args = self._inject_kb_context(args)
         try:
             self.cli_func(args=args, obj=self.ctx_obj, standalone_mode=False)
         except SystemExit:
@@ -126,10 +152,32 @@ class ReplEngine:
         except click.ClickException as e:
             self.skin.error(f"Error: {e.format_message()}")
         except HardwareDatabaseAPIError as e:
-            self.skin.error(f"API error: {e.message}")
+            self.skin.error(f"API error: {e.message}", hint=e.hint)
         except Exception as e:
             self.skin.error(f"Unexpected error: {e}")
         return True
+
+    # Commands that accept a --kb option. Used by `use <kb>` context injection.
+    _KB_COMMANDS = {
+        ("file", "list"), ("file", "upload"), ("file", "delete"), ("file", "chunks"),
+        ("query", "ask"),
+        ("perm", "list"), ("perm", "grant"), ("perm", "assign-kb"),
+        ("task", "list"), ("task", "clear-finished"), ("task", "delete"),
+        ("task", "pause"), ("task", "resume"),
+        ("conv", "list"), ("conv", "create"),
+    }
+
+    def _inject_kb_context(self, args: list[str]) -> list[str]:
+        """If a KB context is set via `use`, inject --kb into KB-aware commands."""
+        if not self._current_kb or len(args) < 2:
+            return args
+        cmd_key = (args[0], args[1])
+        if cmd_key not in self._KB_COMMANDS:
+            return args
+        # Already has --kb somewhere → leave alone
+        if any(a == "--kb" or a.startswith("--kb=") for a in args):
+            return args
+        return args[:2] + ["--kb", self._current_kb] + args[2:]
 
 
 # Lazy imports for dispatch
@@ -141,6 +189,7 @@ REPL_HELP = """
   [bold]auth logout[/bold]            Log out
   [bold]auth whoami[/bold]            Show current user
   [bold]auth status[/bold]            Show local session
+  [bold]doctor[/bold]                 Full diagnostic report
   [bold]kb list[/bold]                List knowledge bases
   [bold]kb create <name>[/bold]       Create a KB
   [bold]kb delete <name>[/bold]       Delete a KB
@@ -151,19 +200,23 @@ REPL_HELP = """
   [bold]user list[/bold]              List users
   [bold]dept list[/bold]              List departments
   [bold]perm list --kb <n>[/bold]     List KB permissions
+  [bold]perm grant --kb <n> --user <name> --permission <p>[/bold]  Grant permission
   [bold]task list --kb <n>[/bold]     List parse tasks
   [bold]conv list[/bold]              List conversations
   [bold]gov stats[/bold]              Governance stats
   [bold]log audit[/bold]              Audit log
   [bold]config get[/bold]             Server config
 
-[bold]REPL[/bold]
+[bold]REPL Commands[/bold]
+  [bold]use <kb>[/bold]         Set KB context (auto-inject --kb to subcommands)
+  [bold]unuse[/bold]             Clear KB context
   [bold]help[/bold] / [bold]h[/bold] / [bold]?[/bold]  Show this help
   [bold]quit[/bold] / [bold]exit[/bold] / [bold]q[/bold]  Exit REPL
   Ctrl+D / Ctrl+C                     Exit REPL
 
-[bold]Global flags[/bold] (appended to any command):
+[bold]Global flags[/bold] (available on every command):
   --json         JSON output mode
   --api-url URL  Override API server
   --token TOK    Override bearer token
+  -v/--verbose   Show HTTP request/response details
 """

@@ -36,7 +36,7 @@ def log_audit(ctx, user_id, action, limit):
                 for r in rows
             ])
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -48,7 +48,7 @@ def log_audit_stats(ctx):
     try:
         skin.display(client.audit_stats())
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -60,7 +60,7 @@ def log_audit_actions(ctx):
     try:
         skin.display(client.audit_actions())
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -92,7 +92,7 @@ def log_query_traces(ctx, user_id, kb, limit):
                 for r in rows
             ])
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -104,7 +104,7 @@ def log_query_stats(ctx):
     try:
         skin.display(client.query_stats())
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -117,5 +117,5 @@ def log_trace_evidence(ctx, trace_id):
     try:
         skin.display(client.trace_evidence(trace_id))
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)

@@ -15,16 +15,39 @@ import httpx
 class HardwareDatabaseAPIError(Exception):
     """API-level error from the Hardware DataBase server."""
 
-    def __init__(self, message: str, status_code: int = 0):
+    def __init__(self, message: str, status_code: int = 0, hint: str | None = None):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
+        self.hint = hint
+
+    def __str__(self) -> str:
+        parts = [f"HTTP {self.status_code}" if self.status_code else "Connection"]
+        parts.append(self.message)
+        if self.hint:
+            parts.append(f"→ {self.hint}")
+        return " | ".join(parts)
 
 
 def _connection_error(base_url: str) -> HardwareDatabaseAPIError:
     return HardwareDatabaseAPIError(
-        f"无法连接到 API 服务器 ({base_url})。请先运行 hardware-database-server。"
+        f"无法连接到 API 服务器 ({base_url})。",
+        hint="检查后端是否启动 (hardware-database-server) 或用 --api-url 指定其他地址。",
     )
+
+
+# Static hints for common HTTP status codes. Command-specific hints are
+# added on top of these in the command layer via `hint=` on APIError.
+_STATUS_HINTS = {
+    401: "会话已过期或 token 无效 — 运行 `hdb auth login` 重新登录。",
+    403: "权限不足 — 运行 `hdb auth whoami` 查看当前角色，或联系管理员授权。",
+    404: "资源不存在 — 检查名称/ID 是否拼写正确。",
+    422: "请求参数校验失败 — 检查必填字段和字段类型。",
+    500: "服务端内部错误 — 非客户端凭据问题，请联系管理员或稍后重试。",
+    502: "上游服务不可达 — 后端到 RAGFlow/LLM 的连接失败。",
+    503: "服务不可用 — 后端正在启动或过载，请稍后重试。",
+    504: "上游服务超时 — RAGFlow/LLM 响应过慢。",
+}
 
 
 class HardwareDatabaseClient:
@@ -42,10 +65,12 @@ class HardwareDatabaseClient:
         base_url: str = "http://127.0.0.1:8000",
         token: str | None = None,
         timeout: float = 30.0,
+        verbose_logger=None,
     ):
         self.base_url = base_url.rstrip("/")
         self.token = token
         self._timeout = timeout
+        self._verbose = verbose_logger  # callable(str) -> None, or None
         headers = {}
         if token:
             headers["Authorization"] = f"Bearer {token}"
@@ -70,6 +95,10 @@ class HardwareDatabaseClient:
         self.token = token
         self._client.headers["Authorization"] = f"Bearer {token}"
 
+    def set_verbose_logger(self, fn) -> None:
+        """Install a callback for verbose HTTP tracing. Pass None to disable."""
+        self._verbose = fn
+
     # ── low-level helpers ────────────────────────────────────────────────
 
     def _request(
@@ -84,6 +113,11 @@ class HardwareDatabaseClient:
         timeout: float | None = None,
     ) -> Any:
         try:
+            if self._verbose:
+                self._verbose(
+                    f"[b]Request:[/b] {method} {self.base_url}{path}"
+                    + (f"\n[b]Body:[/b] {json.dumps(json_body, ensure_ascii=False, default=str)}" if json_body else "")
+                )
             resp = self._client.request(
                 method,
                 path,
@@ -93,12 +127,20 @@ class HardwareDatabaseClient:
                 data=data,
                 timeout=timeout or self._timeout,
             )
+            if self._verbose:
+                ctype = resp.headers.get("content-type", "")
+                body_preview = resp.text[:300] if "text" in ctype else "…"
+                self._verbose(
+                    f"[b]Response:[/b] {resp.status_code} {path}"
+                    + (f"\n[b]Body:[/b] {body_preview}" if body_preview else "")
+                )
         except httpx.ConnectError:
             raise _connection_error(self.base_url)
         except httpx.TimeoutException:
             raise HardwareDatabaseAPIError(
-                f"请求超时 ({method} {path})。",
+                f"请求超时 ({method} {path})",
                 status_code=0,
+                hint="后端或上游服务响应过慢，可稍后重试或联系管理员。",
             )
         return self._handle(resp)
 
@@ -127,10 +169,10 @@ class HardwareDatabaseClient:
                 for line in resp.iter_lines():
                     if not line:
                         continue
-                    if line.startswith("event: "):
-                        current_event = line[7:].strip()
-                    elif line.startswith("data: "):
-                        payload = line[6:]
+                    if line.startswith("event:"):
+                        current_event = line[6:].strip()
+                    elif line.startswith("data:"):
+                        payload = line[5:].lstrip()
                         try:
                             yield (current_event, json.loads(payload))
                         except json.JSONDecodeError:
@@ -164,7 +206,10 @@ class HardwareDatabaseClient:
             detail = body.get("detail", body) if isinstance(body, dict) else body
         except Exception:
             detail = resp.text or f"HTTP {resp.status_code}"
-        return HardwareDatabaseAPIError(str(detail), resp.status_code)
+        # Attach a generic hint for this status code. Command handlers
+        # that know the context can override hint via the exception.
+        hint = _STATUS_HINTS.get(resp.status_code)
+        return HardwareDatabaseAPIError(str(detail), resp.status_code, hint=hint)
 
     # ────────────────────────────────────────────────────────────────────
     # API methods — one per backend endpoint, grouped by area
@@ -194,6 +239,24 @@ class HardwareDatabaseClient:
     # ---- Users -------------------------------------------------------
     def list_users(self) -> Any:
         return self._get("/users")
+
+    def resolve_user_id(self, user: str | int) -> int:
+        """Accept either a numeric id or a username; return the id.
+
+        Raises HardwareDatabaseAPIError if the username is unknown.
+        """
+        if isinstance(user, int) or (isinstance(user, str) and user.isdigit()):
+            return int(user)
+        users = self.list_users()
+        rows = users if isinstance(users, list) else users.get("users", users.get("data", []))
+        for u in rows:
+            if u.get("username") == user:
+                return int(u.get("id"))
+        raise HardwareDatabaseAPIError(
+            f"未找到用户名 '{user}'",
+            status_code=404,
+            hint="运行 `hdb user list` 查看现有用户，或改用数字 ID。",
+        )
 
     def create_user(
         self,

@@ -41,7 +41,7 @@ def file_list(ctx, kb):
                 for r in rows
             ])
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed to list files: {e.message}")
+        skin.api_error("List files", e)
         raise SystemExit(1)
 
 
@@ -57,7 +57,8 @@ def file_upload(ctx, kb, source_group, files):
     session = ctx.obj.get("session")
     if session and session.role not in ("dept_admin", "system_admin"):
         skin.error(
-            f"权限不足: 需要 dept_admin 或 system_admin, 当前身份 {session.role or '未登录'}"
+            f"权限不足: 需要 dept_admin 或 system_admin, 当前身份 {session.role or '未登录'}",
+            hint="联系管理员为你分配 dept_admin 角色。",
         )
         raise SystemExit(2)
     results = []
@@ -70,7 +71,7 @@ def file_upload(ctx, kb, source_group, files):
         except HardwareDatabaseAPIError as e:
             results.append({"file": fp, "ok": False, "error": e.message})
             if not skin.json_mode:
-                skin.error(f"Failed to upload {fp}: {e.message}")
+                skin.api_error(f"Upload {os.path.basename(fp)}", e)
     if skin.json_mode:
         skin.json_out(results)
     failed = [r for r in results if not r["ok"]]
@@ -81,21 +82,26 @@ def file_upload(ctx, kb, source_group, files):
 @file_group.command("delete", help="Delete a file from a KB.")
 @click.option("--kb", required=True, help="Knowledge base name")
 @click.option("--name", required=True, help="File name to delete")
+@click.option("-y", "--yes", is_flag=True, default=False, help="Skip confirmation.")
 @click.pass_context
-def file_delete(ctx, kb, name):
+def file_delete(ctx, kb, name, yes):
     client = ctx.obj["client"]
     skin = ctx.obj["skin"]
     session = ctx.obj.get("session")
     if session and session.role != "system_admin":
         skin.error(
-            f"权限不足: 需要 system_admin, 当前身份 {session.role or '未登录'}"
+            f"权限不足: 需要 system_admin, 当前身份 {session.role or '未登录'}",
+            hint="联系 system_admin 用户执行此操作。",
         )
         raise SystemExit(2)
+    if not yes and not click.confirm(f"Delete file '{name}' from {kb}?"):
+        skin.info("Cancelled.")
+        return
     try:
         client.delete_file(kb, name)
         skin.success(f"File [bold]{name}[/bold] deleted from {kb}.")
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed to delete file: {e.message}")
+        skin.api_error("Delete file", e)
         raise SystemExit(1)
 
 
@@ -110,5 +116,5 @@ def file_chunks(ctx, kb, file_id):
         data = client.get_file_chunks(kb, file_id)
         skin.display(data)
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed to fetch chunks: {e.message}")
+        skin.api_error("Fetch chunks", e)
         raise SystemExit(1)

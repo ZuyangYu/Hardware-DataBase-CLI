@@ -34,7 +34,7 @@ def task_list(ctx, kb):
                 for r in rows
             ])
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -50,7 +50,7 @@ def task_clear(ctx, kb):
         if skin.json_mode:
             skin.json_out(resp)
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -65,7 +65,7 @@ def task_delete(ctx, kb, task_id):
         client.delete_parse_task(kb, task_id)
         skin.success(f"Task {task_id} deleted.")
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -82,7 +82,7 @@ def task_pause(ctx, kb, task_id):
         if skin.json_mode:
             skin.json_out(resp)
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -99,5 +99,5 @@ def task_resume(ctx, kb, task_id):
         if skin.json_mode:
             skin.json_out(resp)
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)

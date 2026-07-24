@@ -20,7 +20,7 @@ def config_get(ctx):
         data = client.get_config()
         skin.display(data)
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -45,7 +45,7 @@ def config_set(ctx, payload):
         if skin.json_mode:
             skin.json_out(resp)
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -58,5 +58,5 @@ def config_ragflow_health(ctx):
         data = client.ragflow_health()
         skin.display(data)
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)

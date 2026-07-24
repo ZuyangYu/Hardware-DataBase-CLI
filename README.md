@@ -54,6 +54,9 @@ hdb
 | `gov` | `stats`, `kb-summaries` | auth |
 | `config` | `get`, `set`, `ragflow-health` | varies |
 | `log` | `audit`, `audit-stats`, `audit-actions`, `query-traces`, `query-stats`, `trace-evidence` | admin |
+| `doctor` | (default), `config` | — |
+| `completion` | `bash`, `zsh`, `fish` | — |
+| `version` | — | — |
 
 ## Global Options
 
@@ -61,8 +64,40 @@ hdb
 --api-url URL    API server URL (env: HDB_API_URL, default: http://127.0.0.1:8000)
 --token TOKEN    Bearer token (env: HDB_TOKEN)
 --json           Output as JSON instead of formatted tables
+-v/--verbose     Print HTTP method/URL/status for every request
 --help           Show help
 ```
+
+## Diagnostics & Troubleshooting
+
+When something doesn't work, run:
+
+```bash
+hdb doctor              # Full diagnostic report
+hdb doctor config       # Show resolved configuration
+hdb -v <any-command>    # Print HTTP request/response details
+```
+
+Common issues:
+
+- **`Login failed: HTTP 500`** — the *server* is broken (not your credentials). Run `hdb doctor` to confirm.
+- **`Query failed: read permission required`** — you lack access to that KB. Run `hdb perm list --kb <name>` and ask an admin to grant permission.
+- **`No such option: --json` on subcommands** — most output commands accept `--json` locally now (`hdb kb list --json`, `hdb auth status --json`, etc.). If a command doesn't, put the flag before the subcommand: `hdb --json <cmd>`.
+
+## Shell Completion
+
+Enable tab completion for command names, subcommands, and option names:
+
+```bash
+# Bash
+eval "$(_HDB_COMPLETE=bash_source hdb)"
+# Zsh
+eval "$(_HDB_COMPLETE=zsh_source hdb)"
+# Fish
+_HDB_COMPLETE=fish_source hdb | source
+```
+
+Run `hdb completion <shell>` to print the exact command.
 
 ## REPL
 
@@ -77,11 +112,28 @@ hdb> kb list
   circuits    Circuit designs       12
   datasheets  Device datasheets     45
 
+hdb> use circuits                   # Set KB context
+  Now using KB: circuits
+
+hdb(circuits)> file list            # --kb auto-injected
+hdb(circuits)> query ask "What is C1101?"
+hdb(circuits)> unuse                # Clear context
+
 hdb> quit
 Goodbye!
 ```
 
-Features: history, auto-suggest, command completion. Falls back to plain `input()` if prompt_toolkit is not installed.
+Features: command history, auto-suggest, KB context via `use`/`unuse`, falls back to plain `input()` if prompt_toolkit is missing.
+
+## Destructive Commands
+
+Commands that delete data prompt for confirmation. Pass `-y/--yes` to skip:
+
+```bash
+hdb kb delete my-kb --yes
+hdb dept delete 42 --yes
+hdb file delete --kb my-kb --name foo.pdf --yes
+```
 
 ## API Endpoints Covered
 

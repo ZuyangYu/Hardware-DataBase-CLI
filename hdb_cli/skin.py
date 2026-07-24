@@ -43,11 +43,30 @@ class ConsoleSkin:
         else:
             self.console.print(f"[green]✓[/green] {msg}")
 
-    def error(self, msg: str) -> None:
+    def error(self, msg: str, hint: str | None = None) -> None:
         if self.json_mode:
-            self._json({"status": "error", "message": msg}, err=True)
+            payload = {"status": "error", "message": msg}
+            if hint:
+                payload["hint"] = hint
+            self._json(payload, err=True)
         else:
             self.err_console.print(f"[red]✗[/red] {msg}")
+            if hint:
+                self.err_console.print(f"  [dim]→ {hint}[/dim]")
+
+    def api_error(self, action: str, err) -> None:
+        """Format a HardwareDatabaseAPIError with action context + hint.
+
+        `err` is a HardwareDatabaseAPIError but we don't import it here to
+        keep skin.py dependency-free; we duck-type its attributes.
+        """
+        status = getattr(err, "status_code", 0)
+        message = getattr(err, "message", str(err))
+        hint = getattr(err, "hint", None)
+        head = f"{action} failed"
+        if status:
+            head = f"{action} failed (HTTP {status})"
+        self.error(f"{head}: {message}", hint=hint)
 
     def warning(self, msg: str) -> None:
         if self.json_mode:
@@ -68,6 +87,14 @@ class ConsoleSkin:
         if self.json_mode:
             return
         self.console.print(f"[dim]{msg}[/dim]")
+
+    def next_step(self, *lines: str) -> None:
+        """Print '💡 Next:' hint block after a table/result. Silent in JSON mode."""
+        if self.json_mode or not lines:
+            return
+        self.console.print("[dim]💡 下一步:[/dim]")
+        for line in lines:
+            self.console.print(f"  [dim]{line}[/dim]")
 
     def banner(self) -> None:
         if self.json_mode:

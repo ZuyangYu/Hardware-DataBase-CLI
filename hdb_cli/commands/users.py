@@ -34,7 +34,7 @@ def user_list(ctx):
                 for r in rows
             ])
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -55,7 +55,7 @@ def user_create(ctx, username, password, role, department_id):
         if skin.json_mode:
             skin.json_out(resp)
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -70,7 +70,7 @@ def user_set_active(ctx, user_id, active):
         client.set_user_active(user_id, active)
         skin.success(f"User {user_id} set to {'active' if active else 'inactive'}.")
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
 
 
@@ -87,5 +87,5 @@ def user_reset_password(ctx, user_id, password):
         client.reset_user_password(user_id, password)
         skin.success(f"Password reset for user {user_id}.")
     except HardwareDatabaseAPIError as e:
-        skin.error(f"Failed: {e.message}")
+        skin.api_error("Failed", e)
         raise SystemExit(1)
