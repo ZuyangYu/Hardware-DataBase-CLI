@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hardware-database-cli"
+version = "0.1.0"
+description = "Standalone CLI for the Hardware DataBase HTTP API (~44 endpoints) with an interactive REPL."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{name = "Hardware DataBase CLI Team"}]
+license = {text = "MIT"}
+keywords = ["hardware-database", "cli", "rag", "knowledge-base"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "click>=8.1.0",
+    "httpx>=0.27.0",
+    "rich>=13.7.0",
+    "prompt-toolkit>=3.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.0",
+    "respx>=0.21",
+]
+
+[project.scripts]
+hdb = "hdb_cli.main:cli"
+
+[project.urls]
+Homepage = "https://github.com/ZuyangYu/Hardware-DataBase-CLI"
+Repository = "https://github.com/ZuyangYu/Hardware-DataBase-CLI"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["hdb_cli*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
