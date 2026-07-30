@@ -69,3 +69,23 @@ def perm_assign_kb(ctx, kb, department_id):
     except HardwareDatabaseAPIError as e:
         skin.api_error("Reassign KB", e)
         raise SystemExit(1)
+
+
+@perm_group.command("revoke", help="Revoke a user's permission on a KB (dept_admin).")
+@click.option("--kb", required=True)
+@click.option("--user", "user_ref", required=True, help="Username or numeric user ID")
+@click.pass_context
+def perm_revoke(ctx, kb, user_ref):
+    client = ctx.obj["client"]
+    skin = ctx.obj["skin"]
+    try:
+        user_id = client.resolve_user_id(user_ref)
+    except HardwareDatabaseAPIError as e:
+        skin.api_error("Resolve user", e)
+        raise SystemExit(1)
+    try:
+        client.revoke_kb_permission(kb, user_id)
+        skin.success(f"Permission revoked for user {user_ref} (id={user_id}) on {kb}.")
+    except HardwareDatabaseAPIError as e:
+        skin.api_error("Revoke permission", e)
+        raise SystemExit(1)

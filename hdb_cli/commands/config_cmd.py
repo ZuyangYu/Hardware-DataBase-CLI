@@ -60,3 +60,23 @@ def config_ragflow_health(ctx):
     except HardwareDatabaseAPIError as e:
         skin.api_error("Failed", e)
         raise SystemExit(1)
+
+
+@config_group.command("llm-health", help="Check LLM provider connectivity.")
+@click.pass_context
+def config_llm_health(ctx):
+    client = ctx.obj["client"]
+    skin = ctx.obj["skin"]
+    try:
+        data = client.llm_health()
+        if skin.json_mode:
+            skin.json_out(data)
+        else:
+            reachable = data.get("reachable", False)
+            if reachable:
+                skin.success(f"LLM reachable — provider: {data.get('provider', '?')}")
+            else:
+                skin.error(f"LLM unreachable: {data.get('message', '')}")
+    except HardwareDatabaseAPIError as e:
+        skin.api_error("LLM health check failed", e)
+        raise SystemExit(1)

@@ -34,9 +34,12 @@ from .commands.config_cmd import config_group
 from .commands.logs import log_group
 from .commands.doctor import doctor_group
 from .commands.misc import completion_cmd, version_cmd
+from .commands.assets import asset_group as assets_group
+from .commands.structured import structured_group
+from .commands.evaluation import eval_group as evaluation_group
 
 
-DEFAULT_URL = "http://127.0.0.1:8000"
+DEFAULT_URL = "http://127.0.0.1:8001"
 
 # Groups that do NOT require a token. Everything else prompts login if
 # no session is on disk.
@@ -155,6 +158,7 @@ for _grp in (
     server_group, auth_group, kb_group, file_group, query_group,
     user_group, dept_group, perm_group, task_group, conv_group,
     gov_group, config_group, log_group, doctor_group,
+    assets_group, structured_group, evaluation_group,
 ):
     cli.add_command(_grp)
 

@@ -8,6 +8,7 @@ from hdb_cli.client import HardwareDatabaseClient, HardwareDatabaseAPIError
 
 
 BASE = "http://test-server:8000"
+P = "/api/v1"
 
 
 def _client():
@@ -25,7 +26,7 @@ def test_health_ok():
 
 @respx.mock
 def test_bearer_header_present():
-    route = respx.get(f"{BASE}/whoami").mock(
+    route = respx.get(f"{BASE}{P}/whoami").mock(
         return_value=httpx.Response(200, json={"username": "alice", "role": "user"})
     )
     with _client() as c:
@@ -36,7 +37,7 @@ def test_bearer_header_present():
 
 @respx.mock
 def test_login_sets_token():
-    respx.post(f"{BASE}/login").mock(
+    respx.post(f"{BASE}{P}/login").mock(
         return_value=httpx.Response(200, json={"token": "new-tok", "user": {"username": "alice", "role": "user"}})
     )
     with HardwareDatabaseClient(base_url=BASE) as c:
@@ -46,7 +47,7 @@ def test_login_sets_token():
 
 @respx.mock
 def test_error_raises_api_error():
-    respx.get(f"{BASE}/kbs").mock(
+    respx.get(f"{BASE}{P}/kbs").mock(
         return_value=httpx.Response(403, json={"detail": "Permission denied"})
     )
     with _client() as c:
@@ -58,7 +59,7 @@ def test_error_raises_api_error():
 
 @respx.mock
 def test_upload_multipart():
-    route = respx.post(f"{BASE}/kbs/my-kb/files").mock(
+    route = respx.post(f"{BASE}{P}/kbs/my-kb/files").mock(
         return_value=httpx.Response(200, json={"ok": True})
     )
     import tempfile, os
@@ -80,7 +81,7 @@ def test_query_sse_stream():
         "event: delta\ndata: {\"text\": \"world\"}\n\n"
         "event: done\ndata: {\"total_tokens\": 5}\n\n"
     )
-    respx.post(f"{BASE}/query").mock(
+    respx.post(f"{BASE}{P}/query").mock(
         return_value=httpx.Response(
             200,
             content=sse_body,

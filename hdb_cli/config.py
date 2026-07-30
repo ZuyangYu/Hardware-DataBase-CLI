@@ -9,7 +9,7 @@ API base URL:
   1. --api-url CLI option
   2. HDB_API_URL env var
   3. Saved session file
-  4. http://127.0.0.1:8000
+  4. http://127.0.0.1:8001
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from dataclasses import dataclass, asdict
 
 CONFIG_DIR = Path(os.environ.get("HDB_CONFIG_DIR", os.path.expanduser("~/.config/hdb-cli")))
 TOKEN_FILE = CONFIG_DIR / "session.json"
-DEFAULT_URL = "http://127.0.0.1:8000"
+DEFAULT_URL = "http://127.0.0.1:8001"
 
 
 @dataclass

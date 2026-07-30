@@ -12,6 +12,9 @@ from typing import Any, Iterator
 import httpx
 
 
+API_PREFIX = "/api/v1"
+
+
 class HardwareDatabaseAPIError(Exception):
     """API-level error from the Hardware DataBase server."""
 
@@ -36,6 +39,13 @@ def _connection_error(base_url: str) -> HardwareDatabaseAPIError:
     )
 
 
+def _prefixed(path: str) -> str:
+    """Prepend API_PREFIX to path unless it's the bare health probe."""
+    if path == "/health":
+        return path
+    return API_PREFIX + path
+
+
 # Static hints for common HTTP status codes. Command-specific hints are
 # added on top of these in the command layer via `hint=` on APIError.
 _STATUS_HINTS = {
@@ -53,7 +63,8 @@ _STATUS_HINTS = {
 class HardwareDatabaseClient:
     """Thin, dependency-light HTTP client for the Hardware DataBase API.
 
-    - Default base URL: ``http://127.0.0.1:8000`` (matches the server).
+    - Default base URL: ``http://127.0.0.1:8001`` (matches the server).
+    - All routes are prefixed with ``/api/v1`` automatically (except ``/health``).
     - Auth: ``Authorization: Bearer <token>`` header when token is set.
     - Errors: any HTTP >=400 raises :class:`HardwareDatabaseAPIError`.
     - Streaming: ``query()`` yields ``(event, payload)`` tuples parsed
@@ -62,7 +73,7 @@ class HardwareDatabaseClient:
 
     def __init__(
         self,
-        base_url: str = "http://127.0.0.1:8000",
+        base_url: str = "http://127.0.0.1:8001",
         token: str | None = None,
         timeout: float = 30.0,
         verbose_logger=None,
@@ -112,6 +123,7 @@ class HardwareDatabaseClient:
         data: Any = None,
         timeout: float | None = None,
     ) -> Any:
+        path = _prefixed(path)
         try:
             if self._verbose:
                 self._verbose(
@@ -147,8 +159,11 @@ class HardwareDatabaseClient:
     def _get(self, path: str, params: dict | None = None) -> Any:
         return self._request("GET", path, params=params)
 
-    def _post(self, path: str, json_body: Any = None, timeout: float | None = None) -> Any:
-        return self._request("POST", path, json_body=json_body, timeout=timeout or 60.0)
+    def _post(
+        self, path: str, json_body: Any = None, *,
+        params: dict | None = None, files: Any = None, timeout: float | None = None,
+    ) -> Any:
+        return self._request("POST", path, json_body=json_body, params=params, files=files, timeout=timeout or 60.0)
 
     def _put(self, path: str, json_body: Any = None) -> Any:
         return self._request("PUT", path, json_body=json_body, timeout=60.0)
@@ -158,6 +173,7 @@ class HardwareDatabaseClient:
 
     def _stream(self, path: str, json_body: Any) -> Iterator[tuple[str, Any]]:
         """POST + SSE stream. Yields (event, payload) tuples."""
+        path = _prefixed(path)
         try:
             with self._client.stream(
                 "POST", path, json=json_body, timeout=120.0
@@ -271,10 +287,10 @@ class HardwareDatabaseClient:
         return self._post("/users", body)
 
     def set_user_active(self, user_id: int, active: bool) -> Any:
-        return self._put(f"/users/{user_id}/active", {"active": active})
+        return self._put(f"/users/{user_id}/active", {"is_active": active})
 
     def reset_user_password(self, user_id: int, new_password: str) -> Any:
-        return self._put(f"/users/{user_id}/password", {"password": new_password})
+        return self._put(f"/users/{user_id}/password", {"new_password": new_password})
 
     # ---- Departments -------------------------------------------------
     def list_departments(self) -> Any:
@@ -414,7 +430,7 @@ class HardwareDatabaseClient:
 
     def send_conversation_message(self, session_id: str, message: str) -> Any:
         return self._post(
-            f"/conversations/{session_id}/messages", {"message": message}
+            f"/conversations/{session_id}/messages", {"role": "user", "content": message}
         )
 
     # ---- Governance -------------------------------------------------
@@ -452,3 +468,145 @@ class HardwareDatabaseClient:
 
     def trace_evidence(self, trace_id: str) -> Any:
         return self._get(f"/logs/query/{trace_id}/evidence")
+
+    # ---- KB permissions: revoke (DELETE) --------------------------------
+    def revoke_kb_permission(self, kb_name: str, user_id: int) -> Any:
+        return self._delete(f"/kbs/{kb_name}/permissions/{user_id}")
+
+    # ---- Hardware Assets ------------------------------------------------
+    def list_assets(self, kb_name: str, query: str = "") -> Any:
+        params = {"query": query} if query else None
+        return self._get(f"/kbs/{kb_name}/assets", params=params)
+
+    def get_asset(self, kb_name: str, asset_id: int) -> Any:
+        return self._get(f"/kbs/{kb_name}/assets/{asset_id}")
+
+    def list_asset_candidates(self, kb_name: str, status: str = "pending") -> Any:
+        return self._get(f"/kbs/{kb_name}/asset-candidates", params={"status": status})
+
+    def list_asset_sources(self, kb_name: str) -> Any:
+        return self._get(f"/kbs/{kb_name}/asset-sources")
+
+    def generate_asset_candidate(self, kb_name: str, file_id: str) -> Any:
+        return self._post(f"/kbs/{kb_name}/asset-candidates/generate", {"file_id": file_id})
+
+    def accept_asset_candidate(
+        self, kb_name: str, candidate_id: int,
+        asset_type: str | None = None, name: str | None = None,
+        model: str | None = None, manufacturer: str | None = None,
+        serial_number: str | None = None, version: str | None = None,
+        status: str | None = None, owner_user_id: int | None = None,
+        attributes: dict | None = None,
+    ) -> Any:
+        body: dict[str, Any] = {}
+        if asset_type is not None: body["asset_type"] = asset_type
+        if name is not None: body["name"] = name
+        if model is not None: body["model"] = model
+        if manufacturer is not None: body["manufacturer"] = manufacturer
+        if serial_number is not None: body["serial_number"] = serial_number
+        if version is not None: body["version"] = version
+        if status is not None: body["status"] = status
+        if owner_user_id is not None: body["owner_user_id"] = owner_user_id
+        if attributes is not None: body["attributes"] = attributes
+        return self._post(f"/kbs/{kb_name}/asset-candidates/{candidate_id}/accept", body)
+
+    def reject_asset_candidate(self, kb_name: str, candidate_id: int) -> Any:
+        return self._post(f"/kbs/{kb_name}/asset-candidates/{candidate_id}/reject")
+
+    # ---- Structured KB data ---------------------------------------------
+    def list_spreadsheets(self, kb_name: str) -> Any:
+        return self._get(f"/kbs/{kb_name}/structured/spreadsheets")
+
+    def list_circuit_designs(self, kb_name: str) -> Any:
+        return self._get(f"/kbs/{kb_name}/structured/circuit-designs")
+
+    def get_circuit_design(
+        self, kb_name: str, design_id: str,
+        net_query: str = "", instance_query: str = "",
+    ) -> Any:
+        params = {}
+        if net_query: params["net_query"] = net_query
+        if instance_query: params["instance_query"] = instance_query
+        return self._get(f"/kbs/{kb_name}/structured/circuit-designs/{design_id}", params=params or None)
+
+    def delete_circuit_design(self, kb_name: str, design_id: str) -> Any:
+        return self._delete(f"/kbs/{kb_name}/structured/circuit-designs/{design_id}")
+
+    def get_circuit_parse_log(self, kb_name: str, design_id: str) -> Any:
+        return self._get(f"/kbs/{kb_name}/structured/circuit-designs/{design_id}/parse-log")
+
+    def list_modules(self, kb_name: str, design_id: str = "") -> Any:
+        return self._get(f"/kbs/{kb_name}/structured/modules", params={"design_id": design_id})
+
+    def list_test_reports(self, kb_name: str) -> Any:
+        return self._get(f"/kbs/{kb_name}/structured/test-reports")
+
+    def list_test_measurements(self, kb_name: str, query: str = "", limit: int = 100) -> Any:
+        return self._get(
+            f"/kbs/{kb_name}/structured/test-measurements",
+            params={"query": query, "limit": limit},
+        )
+
+    def list_schematics(self, kb_name: str) -> Any:
+        return self._get(f"/kbs/{kb_name}/structured/schematics")
+
+    def get_schematic_page(self, kb_name: str, design_id: str, page_number: int) -> Any:
+        return self._get(f"/kbs/{kb_name}/structured/schematics/{design_id}/pages/{page_number}")
+
+    # ---- Evaluation ----------------------------------------------------
+    def list_evaluation_runs(self, output_root: str | None = None) -> Any:
+        params = {"output_root": output_root} if output_root else None
+        return self._get("/evaluation/runs", params=params)
+
+    def create_evaluation_run(
+        self, dataset_path: str, mode: str = "online",
+        score_enabled: bool = True, sample_ids: list[str] | None = None,
+        tags: list[str] | None = None, snapshot_path: str | None = None,
+        output_root: str | None = None,
+    ) -> Any:
+        body: dict[str, Any] = {"dataset_path": dataset_path, "mode": mode, "score_enabled": score_enabled}
+        if sample_ids: body["sample_ids"] = sample_ids
+        if tags: body["tags"] = tags
+        if snapshot_path: body["snapshot_path"] = snapshot_path
+        params = {"output_root": output_root} if output_root else None
+        return self._post("/evaluation/runs", body, params=params)
+
+    def upload_evaluation_dataset(self, file_path: str, output_root: str | None = None) -> Any:
+        """Upload a .jsonl dataset file for evaluation (multipart)."""
+        params = {"output_root": output_root} if output_root else None
+        with open(file_path, "rb") as f:
+            name = file_path.rsplit("/", 1)[-1]
+            return self._request("POST", "/evaluation/datasets", files={"file": (name, f)}, params=params)
+
+    def start_evaluation_run(self, run_id: str, output_root: str | None = None) -> Any:
+        params = {"output_root": output_root} if output_root else None
+        return self._post(f"/evaluation/runs/{run_id}/start", params=params)
+
+    def pause_evaluation_run(self, run_id: str, output_root: str | None = None) -> Any:
+        params = {"output_root": output_root} if output_root else None
+        return self._post(f"/evaluation/runs/{run_id}/pause", params=params)
+
+    def resume_evaluation_run(self, run_id: str, output_root: str | None = None) -> Any:
+        params = {"output_root": output_root} if output_root else None
+        return self._post(f"/evaluation/runs/{run_id}/resume", params=params)
+
+    def cancel_evaluation_run(self, run_id: str, output_root: str | None = None) -> Any:
+        params = {"output_root": output_root} if output_root else None
+        return self._post(f"/evaluation/runs/{run_id}/cancel", params=params)
+
+    def get_evaluation_run(self, run_id: str, output_root: str | None = None) -> Any:
+        params = {"output_root": output_root} if output_root else None
+        return self._get(f"/evaluation/runs/{run_id}", params=params)
+
+    def compare_evaluation_run(self, run_id: str, baseline: str, output_root: str | None = None) -> Any:
+        params: dict[str, Any] = {"baseline": baseline}
+        if output_root: params["output_root"] = output_root
+        return self._get(f"/evaluation/runs/{run_id}/compare", params=params)
+
+    # ---- Metrics -------------------------------------------------------
+    def task_metrics(self, hours: int = 24) -> Any:
+        return self._get("/task-metrics", params={"hours": hours})
+
+    # ---- LLM Health ----------------------------------------------------
+    def llm_health(self) -> Any:
+        return self._get("/health/llm")

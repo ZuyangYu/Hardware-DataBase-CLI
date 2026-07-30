@@ -41,7 +41,7 @@ def user_list(ctx):
 @user_group.command("create", help="Create a new user.")
 @click.option("--username", "-u", required=True)
 @click.option("--password", "-p", default=None)
-@click.option("--role", required=True, type=click.Choice(["user", "dept_admin", "system_admin"]))
+@click.option("--role", required=True, type=click.Choice(["user", "dept_admin"]))
 @click.option("--dept-id", "department_id", type=int, default=None)
 @click.pass_context
 def user_create(ctx, username, password, role, department_id):

@@ -53,12 +53,13 @@ def file_list(ctx, kb):
 def file_upload(ctx, kb, source_group, files):
     client = ctx.obj["client"]
     skin = ctx.obj["skin"]
-    # Client-side role guard (server also enforces)
+    # Client-side role guard (server also enforces).
+    # 三层权限：上传只允许 dept_admin；system_admin 已与 KB 内容完全隔离。
     session = ctx.obj.get("session")
-    if session and session.role not in ("dept_admin", "system_admin"):
+    if session and session.role != "dept_admin":
         skin.error(
-            f"权限不足: 需要 dept_admin 或 system_admin, 当前身份 {session.role or '未登录'}",
-            hint="联系管理员为你分配 dept_admin 角色。",
+            f"权限不足: 上传知识库文件需要 dept_admin，当前身份 {session.role or '未登录'}",
+            hint="联系系统管理员为你分配 dept_admin 角色。",
         )
         raise SystemExit(2)
     results = []
@@ -88,10 +89,11 @@ def file_delete(ctx, kb, name, yes):
     client = ctx.obj["client"]
     skin = ctx.obj["skin"]
     session = ctx.obj.get("session")
-    if session and session.role != "system_admin":
+    # 三层权限：删除文件只允许 dept_admin；system_admin 已与 KB 内容完全隔离。
+    if session and session.role != "dept_admin":
         skin.error(
-            f"权限不足: 需要 system_admin, 当前身份 {session.role or '未登录'}",
-            hint="联系 system_admin 用户执行此操作。",
+            f"权限不足: 删除文件需要 dept_admin，当前身份 {session.role or '未登录'}",
+            hint="请以对应部门管理员身份执行此操作。",
         )
         raise SystemExit(2)
     if not yes and not click.confirm(f"Delete file '{name}' from {kb}?"):

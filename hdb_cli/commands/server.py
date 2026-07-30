@@ -26,3 +26,20 @@ def server_health(ctx):
     except HardwareDatabaseAPIError as e:
         skin.error(f"Server unreachable: {e.message}")
         raise SystemExit(1)
+
+
+@server_group.command("metrics", help="Show task metrics (admin).")
+@click.option("--hours", type=int, default=24, help="Lookback window in hours (1-720)")
+@click.pass_context
+def server_metrics(ctx, hours):
+    client = ctx.obj["client"]
+    skin = ctx.obj["skin"]
+    try:
+        data = client.task_metrics(hours=hours)
+        if skin.json_mode:
+            skin.json_out(data)
+        else:
+            skin.display(data)
+    except HardwareDatabaseAPIError as e:
+        skin.api_error("Failed to fetch metrics", e)
+        raise SystemExit(1)
